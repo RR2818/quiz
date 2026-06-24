@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>クイズ管理画面</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="wrap">
+  <h1>🛠 クイズ管理画面</h1>
+
+  <!-- ===== 問題セット管理 ===== -->
+  <section id="editorSection" class="panel">
+    <div class="row" style="align-items:center">
+      <h2 style="flex:2">問題セット</h2>
+      <select id="quizSelect" style="flex:3"></select>
+    </div>
+    <div class="row">
+      <button class="secondary" id="newQuizBtn">＋ 新規作成</button>
+      <button class="danger" id="deleteQuizBtn">削除</button>
+    </div>
+
+    <label>タイトル</label>
+    <input type="text" id="quizTitle" placeholder="例: 社内懇親会クイズ" />
+
+    <div id="questions" style="margin-top:14px"></div>
+    <button class="ghost full" id="addQuestionBtn">＋ 問題を追加</button>
+    <div style="margin-top:12px">
+      <button class="full" id="saveQuizBtn">💾 この問題セットを保存</button>
+    </div>
+  </section>
+
+  <!-- ===== プロジェクト開始 ===== -->
+  <section id="launchSection" class="panel">
+    <h2>プロジェクトを開始</h2>
+    <div class="row">
+      <div>
+        <label>1問あたりの制限時間(秒) ※0で無制限</label>
+        <input type="number" id="questionTime" value="20" min="0" />
+      </div>
+      <div>
+        <label>全体の制限時間(分) ※0で無制限</label>
+        <input type="number" id="sessionTime" value="0" min="0" />
+      </div>
+    </div>
+    <p class="muted">時間が来ると、残り問題に関わらずその時点で自動終了しランキングを表示します。</p>
+    <button class="full" id="launchBtn">🚀 プロジェクトを立ち上げる（QR表示）</button>
+  </section>
+
+  <!-- ===== ロビー(QR/参加者) ===== -->
+  <section id="lobbySection" class="panel hidden">
+    <h2 id="lobbyQuizTitle"></h2>
+    <p class="muted">下のQRを参加者に読み込んでもらってください。</p>
+    <div class="center">
+      <img id="qrImg" alt="QR" width="240" height="240" style="background:#fff;border-radius:12px;padding:8px" />
+      <div class="code-big" id="roomCode"></div>
+      <div class="muted" id="joinUrl"></div>
+    </div>
+    <div style="margin-top:14px">
+      <span class="badge">参加者: <b id="playerCount">0</b> 人</span>
+    </div>
+    <div class="players-grid" id="playersGrid" style="margin-top:10px"></div>
+    <div style="margin-top:16px">
+      <button class="full" id="startBtn">▶ クイズをスタート（全員一斉）</button>
+    </div>
+  </section>
+
+  <!-- ===== 進行中 ===== -->
+  <section id="controlSection" class="panel hidden">
+    <div class="qmeta"><span id="ctrlIndex"></span> ・ <span id="ctrlStatus"></span></div>
+    <div class="qtext" id="ctrlQText"></div>
+    <div id="ctrlAnswerArea" class="muted" style="margin-top:10px"></div>
+
+    <div class="center" style="margin:14px 0">
+      <span class="badge">回答 <b id="answeredCount">0</b> / <span id="answeredTotal">0</span> 人</span>
+    </div>
+
+    <div id="ctrlRanking"></div>
+
+    <div class="row" style="margin-top:16px">
+      <button id="revealBtn" class="secondary">解答へ進む</button>
+      <button id="nextBtn" disabled>次の問題へ ▶</button>
+    </div>
+    <div style="margin-top:10px">
+      <button class="danger full" id="endBtn">⏹ このプロジェクトを終了</button>
+    </div>
+  </section>
+
+  <!-- ===== 終了/結果ボード ===== -->
+  <section id="resultSection" class="panel hidden">
+    <h1 class="center">🏆 最終結果</h1>
+    <p class="center muted" id="resultReason"></p>
+    <div id="boardArea"></div>
+    <div class="row" style="margin-top:16px">
+      <button class="secondary" id="dlPng">🖼 画像で保存</button>
+      <button class="secondary" id="dlCsv">📄 CSVで保存</button>
+    </div>
+    <div style="margin-top:10px">
+      <button class="ghost full" id="backHome">最初の画面に戻る</button>
+    </div>
+  </section>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

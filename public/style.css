@@ -1,0 +1,161 @@
+:root {
+  --bg: #0f1226;
+  --panel: #1a1f3a;
+  --panel2: #232a4d;
+  --accent: #5b8cff;
+  --accent2: #7c5bff;
+  --ok: #2ecc71;
+  --ng: #ff5b6e;
+  --text: #f2f4ff;
+  --muted: #9aa3c7;
+  --gold: #ffd24a;
+  --silver: #cfd6e6;
+  --bronze: #e0945b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+  background: radial-gradient(1200px 600px at 50% -10%, #232a4d 0%, var(--bg) 60%);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-text-size-adjust: 100%;
+}
+
+.wrap {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+h1, h2, h3 { margin: 0 0 12px; }
+h1 { font-size: 22px; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid #2c335c;
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 16px;
+}
+
+.muted { color: var(--muted); font-size: 13px; }
+
+label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+
+input[type=text], input[type=number], textarea, select {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #38406e;
+  background: var(--panel2);
+  color: var(--text);
+  font-size: 16px;
+}
+textarea { min-height: 60px; resize: vertical; }
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 10px;
+  padding: 13px 18px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  transition: transform .05s ease, opacity .2s;
+}
+button:active { transform: scale(0.98); }
+button:disabled { opacity: .4; cursor: not-allowed; }
+button.secondary { background: #38406e; }
+button.danger { background: linear-gradient(135deg, #ff5b6e, #b3344a); }
+button.ghost { background: transparent; border: 1px solid #38406e; color: var(--text); }
+button.full { width: 100%; }
+
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.row > * { flex: 1; }
+
+.badge {
+  display: inline-block;
+  background: var(--panel2);
+  border: 1px solid #38406e;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.code-big {
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: 6px;
+  text-align: center;
+  color: var(--gold);
+}
+
+.center { text-align: center; }
+.hidden { display: none !important; }
+
+/* 選択肢ボタン */
+.choices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+.choice-btn {
+  padding: 22px 14px;
+  font-size: 18px;
+  border-radius: 14px;
+  background: var(--panel2);
+  border: 2px solid #38406e;
+  min-height: 80px;
+}
+.choice-btn.c0 { background: #c0392b; }
+.choice-btn.c1 { background: #2980b9; }
+.choice-btn.c2 { background: #e0a800; color:#222; }
+.choice-btn.c3 { background: #27ae60; }
+.choice-btn.selected { outline: 4px solid #fff; }
+.choice-btn:disabled { opacity: .55; }
+
+/* 結果表示 */
+.result-big { font-size: 64px; text-align: center; margin: 10px 0; }
+.result-ok { color: var(--ok); }
+.result-ng { color: var(--ng); }
+
+/* ランキング */
+.rank-list { list-style: none; padding: 0; margin: 0; }
+.rank-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; margin-bottom: 8px;
+  background: var(--panel2); border-radius: 12px;
+}
+.rank-item.me { outline: 2px solid var(--accent); }
+.rank-no { font-weight: 800; width: 40px; text-align: center; font-size: 18px; }
+.rank-1 .rank-no { color: var(--gold); }
+.rank-2 .rank-no { color: var(--silver); }
+.rank-3 .rank-no { color: var(--bronze); }
+.rank-name { flex: 1; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank-score { font-weight: 800; color: var(--accent); }
+
+.timer {
+  font-size: 40px; font-weight: 800; text-align: center; color: var(--gold);
+}
+.timer.warn { color: var(--ng); }
+
+.qtext { font-size: 22px; font-weight: 700; line-height: 1.5; }
+.qmeta { color: var(--muted); font-size: 14px; margin-bottom: 6px; }
+
+.players-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.player-chip {
+  background: var(--panel2); border-radius: 999px; padding: 6px 12px; font-size: 14px;
+}
+.player-chip.off { opacity: .4; }
+
+.q-editor {
+  border: 1px solid #38406e; border-radius: 12px; padding: 14px; margin-bottom: 12px;
+  background: var(--panel2);
+}
+
+.toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+  background: #000a; padding: 10px 18px; border-radius: 999px; font-size: 14px;
+  z-index: 50;
+}

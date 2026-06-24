@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>クイズに参加</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 参加フォーム -->
+  <section id="join" class="panel">
+    <h1>🎯 クイズに参加</h1>
+    <p class="muted">ニックネームを入れて参加ボタンを押してください。</p>
+    <label>参加コード</label>
+    <input type="text" id="code" maxlength="5" placeholder="例: ABCDE" autocapitalize="characters" />
+    <button type="button" class="ghost" id="editCodeBtn" style="margin-top:6px;padding:8px 14px;font-size:13px">参加コードを編集する</button>
+    <label>ニックネーム</label>
+    <input type="text" id="nickname" maxlength="20" placeholder="あなたの表示名" />
+    <div style="margin-top:16px">
+      <button class="full" id="joinBtn">参加する</button>
+    </div>
+    <p id="joinError" class="muted" style="color:var(--ng)"></p>
+  </section>
+
+  <!-- 待機中 -->
+  <section id="lobby" class="panel center hidden">
+    <h1 id="lobbyTitle">参加完了！</h1>
+    <p class="muted">主催者の開始を待っています…</p>
+    <div class="badge" id="lobbyName"></div>
+    <div style="font-size:48px;margin:20px 0">⏳</div>
+  </section>
+
+  <!-- 出題中 -->
+  <section id="question" class="panel hidden">
+    <div class="qmeta"><span id="qIndex"></span></div>
+    <div id="qTimer" class="timer"></div>
+    <div class="qtext" id="qText"></div>
+
+    <!-- 選択肢 -->
+    <div class="choices hidden" id="qChoices"></div>
+
+    <!-- フリー回答 -->
+    <div id="qFree" class="hidden" style="margin-top:16px">
+      <input type="text" id="freeInput" maxlength="100" placeholder="答えを入力" />
+      <button class="full" id="freeSubmit" style="margin-top:10px">回答する</button>
+    </div>
+
+    <div id="answeredMsg" class="center hidden" style="margin-top:18px">
+      <div style="font-size:40px">✅</div>
+      <p>回答しました。お待ちください…</p>
+    </div>
+  </section>
+
+  <!-- 結果(各問) -->
+  <section id="reveal" class="panel hidden">
+    <div class="result-big" id="resultIcon"></div>
+    <p class="center" id="resultText"></p>
+    <p class="center muted" id="correctAnswer"></p>
+    <div class="center" style="margin:10px 0">
+      <span class="badge">あなたの順位 <b id="myRank"></b> 位 / <span id="myScore"></span> pt</span>
+    </div>
+    <h3 style="margin-top:18px">ランキング</h3>
+    <ol class="rank-list" id="revealRank"></ol>
+    <button class="ghost full" id="toggleAll" style="margin-top:8px">全員の順位を見る</button>
+  </section>
+
+  <!-- 終了 -->
+  <section id="ended" class="panel hidden">
+    <h1 class="center">🏁 <span id="endTitle">クイズ終了</span></h1>
+    <p class="center muted" id="endReason"></p>
+    <div class="center" style="margin:10px 0">
+      <span class="badge">あなたの最終順位 <b id="finalRank"></b> 位 / <span id="finalScore"></span> pt</span>
+    </div>
+    <h3>最終ランキング</h3>
+    <ol class="rank-list" id="finalRank2"></ol>
+  </section>
+
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="player.js"></script>
+</body>
+</html>
