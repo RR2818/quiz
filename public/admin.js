@@ -190,6 +190,63 @@ $('saveQuizBtn').addEventListener('click', () => {
 });
 
 // =================================================================
+// 問題セットのファイル書き出し / 読み込み
+// =================================================================
+function sanitizeQuiz(data) {
+  // 配列(複数セット)で来た場合は先頭を採用
+  const quiz = Array.isArray(data) ? data[0] : data;
+  if (!quiz || !Array.isArray(quiz.questions)) {
+    throw new Error('問題セットの形式が正しくありません');
+  }
+  return {
+    id: typeof quiz.id === 'string' ? quiz.id : '',
+    title: quiz.title || '(読み込んだ問題)',
+    questions: quiz.questions.map((q) => ({
+      id: q.id || 'q_' + Math.random().toString(36).slice(2, 8),
+      type: q.type === 'free' ? 'free' : 'choice',
+      text: q.text || '',
+      choices: Array.isArray(q.choices) ? q.choices : ['', '', '', ''],
+      answerIndex: Number.isInteger(q.answerIndex) ? q.answerIndex : 0,
+      acceptedAnswers: Array.isArray(q.acceptedAnswers) ? q.acceptedAnswers : [],
+    })),
+  };
+}
+
+$('exportQuizBtn').addEventListener('click', () => {
+  if (!current || !current.questions.length) return toast('書き出す問題がありません');
+  const data = JSON.stringify(current, null, 2);
+  const safeTitle = (current.title || 'quiz').replace(/[\\/:*?"<>|]/g, '_');
+  downloadBlob(new Blob([data], { type: 'application/json' }), `quiz_${safeTitle}.json`);
+  toast('ファイルに書き出しました');
+});
+
+$('importQuizBtn').addEventListener('click', () => $('importFile').click());
+$('importFile').addEventListener('change', (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = sanitizeQuiz(JSON.parse(reader.result));
+      // 同じidが既にあれば上書き扱い、無ければ新規として保存される
+      socket.emit('admin:saveQuiz', parsed, (res) => {
+        if (!res || !res.ok) return toast('読み込み保存に失敗しました');
+        quizzes = res.quizzes;
+        current = JSON.parse(JSON.stringify(parsed));
+        current.id = res.id;
+        refreshQuizList(res.id);
+        renderEditor();
+        toast('読み込んで保存しました');
+      });
+    } catch (err) {
+      toast('読み込み失敗: ' + err.message);
+    }
+  };
+  reader.readAsText(file, 'utf-8');
+  e.target.value = ''; // 同じファイルを再選択できるように
+});
+
+// =================================================================
 // プロジェクト開始
 // =================================================================
 $('launchBtn').addEventListener('click', () => {
@@ -283,6 +340,52 @@ function enterControl(st) {
     }
     ctrlIndexShown = st.currentIndex;
   }
+  // 全員分の回答一覧（管理者画面のみ）
+  renderAnswers(st.answers, st.status, q);
+}
+
+// 全員の回答を見やすく一覧表示（管理者専用）
+function renderAnswers(answers, status, q) {
+  const box = $('ctrlAnswers');
+  if (!answers || !answers.length) {
+    box.innerHTML = '';
+    return;
+  }
+  const answeredList = answers.filter((a) => a.answered);
+  const reveal = status === 'reveal';
+
+  // 選択式は選択肢ごとの集計も表示
+  let summary = '';
+  if (q && q.type === 'choice' && Array.isArray(q.choices)) {
+    const counts = q.choices.map(() => 0);
+    answeredList.forEach((a) => {
+      const idx = q.choices.indexOf(a.answer);
+      if (idx >= 0) counts[idx]++;
+    });
+    summary = '<div class="answers-summary">' +
+      q.choices.map((c, i) =>
+        `<span class="sum-chip">${escapeHtml(c)} <b>${counts[i]}</b></span>`
+      ).join('') + '</div>';
+  }
+
+  let html = `<h3>みんなの回答（${answeredList.length}/${answers.length}）</h3>` + summary +
+    '<div class="answers-grid">';
+  answers.forEach((a) => {
+    let cls = 'ans-chip';
+    let val;
+    if (!a.answered) {
+      cls += ' pending';
+      val = '⏳ 回答待ち';
+    } else {
+      if (reveal) cls += a.correct ? ' ok' : ' ng';
+      val = (a.answer == null || a.answer === '') ? '(無回答)' : escapeHtml(a.answer);
+      if (reveal) val = (a.correct ? '⭕ ' : '❌ ') + val;
+    }
+    html += `<div class="${cls}"><span class="ans-name">${escapeHtml(a.nickname)}</span>` +
+      `<span class="ans-val">${val}</span></div>`;
+  });
+  html += '</div>';
+  box.innerHTML = html;
 }
 
 socket.on('admin:answerCount', (d) => {

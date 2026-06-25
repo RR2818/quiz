@@ -169,8 +169,23 @@ function adminCurrentQuestion(room) {
   };
 }
 
+// 管理者画面用: 現在の問題に対する全員の回答一覧
+function currentAnswers(room) {
+  return Object.values(room.players).map((p) => {
+    const a = p.answers[room.currentIndex];
+    return {
+      playerId: p.playerId,
+      nickname: p.nickname,
+      answered: !!a,
+      answer: a ? a.raw : null,
+      correct: a ? a.correct : false,
+    };
+  });
+}
+
 function emitAdminState(room) {
   const answered = Object.values(room.players).filter((p) => p.answers[room.currentIndex]).length;
+  const showAnswers = room.status === 'question' || room.status === 'reveal';
   io.to(adminRoomName(room.code)).emit('admin:state', {
     code: room.code,
     quizTitle: room.quiz.title,
@@ -182,6 +197,7 @@ function emitAdminState(room) {
     sessionDeadline: room.sessionDeadline || null,
     currentQuestion: adminCurrentQuestion(room),
     answered,
+    answers: showAnswers ? currentAnswers(room) : [],
   });
 }
 
@@ -539,13 +555,10 @@ io.on('connection', (socket) => {
 
     let points = 0;
     if (correct) {
-      points = 1000;
-      if (room.settings.questionTime > 0) {
-        const frac = 1 - elapsed / (room.settings.questionTime * 1000);
-        points += Math.max(0, Math.round(frac * 1000));
-      }
+      // 1問正解につき 1pt（時間ボーナスなし）
+      points = 1;
       player.correctCount += 1;
-      player.totalTime += elapsed;
+      player.totalTime += elapsed; // 同点時の順位付け（早押し）用に保持
     }
 
     player.answers[room.currentIndex] = { raw, correct, points, time: elapsed };
@@ -563,6 +576,8 @@ io.on('connection', (socket) => {
       answered,
       total: Object.keys(room.players).length,
     });
+    // 回答一覧をリアルタイム更新（管理者画面のみ）
+    emitAdminState(room);
   });
 
   socket.on('disconnect', () => {

@@ -29,6 +29,12 @@
     <div style="margin-top:12px">
       <button class="full" id="saveQuizBtn">💾 この問題セットを保存</button>
     </div>
+    <div class="row" style="margin-top:10px">
+      <button class="secondary" id="exportQuizBtn">⬇ ファイルに書き出し</button>
+      <button class="secondary" id="importQuizBtn">⬆ ファイルから読み込み</button>
+    </div>
+    <p class="muted">「書き出し」で問題セットを .json ファイルとして保存できます。別のPCやサーバーでも「読み込み」で復元できます。</p>
+    <input type="file" id="importFile" accept="application/json,.json" class="hidden" />
   </section>
 
   <!-- ===== プロジェクト開始 ===== -->
@@ -75,6 +81,8 @@
     <div class="center" style="margin:14px 0">
       <span class="badge">回答 <b id="answeredCount">0</b> / <span id="answeredTotal">0</span> 人</span>
     </div>
+
+    <div id="ctrlAnswers"></div>
 
     <div id="ctrlRanking"></div>
 

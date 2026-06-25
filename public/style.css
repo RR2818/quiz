@@ -159,3 +159,23 @@ button.full { width: 100%; }
   background: #000a; padding: 10px 18px; border-radius: 999px; font-size: 14px;
   z-index: 50;
 }
+
+/* 管理者: 全員の回答一覧 */
+.answers-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.sum-chip {
+  background: var(--panel2); border: 1px solid #38406e; border-radius: 999px;
+  padding: 5px 12px; font-size: 13px;
+}
+.sum-chip b { color: var(--accent); margin-left: 4px; }
+.answers-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px;
+}
+.ans-chip {
+  background: var(--panel2); border: 1px solid #38406e; border-radius: 10px;
+  padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.ans-chip.pending { opacity: .5; }
+.ans-chip.ok { border-color: var(--ok); background: #173a28; }
+.ans-chip.ng { border-color: var(--ng); background: #3a1820; }
+.ans-name { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ans-val { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
