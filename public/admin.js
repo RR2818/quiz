@@ -330,9 +330,9 @@ function enterControl(st) {
   const q = st.currentQuestion;
   if (q) {
     $('ctrlQText').textContent = q.text;
-    // 出題中は管理者にだけ正解を小さく表示（読み上げ用）
+    // 出題中は正解を表示しない（解答公開時に admin:reveal で表示）
     if (st.status === 'question') {
-      $('ctrlAnswerArea').innerHTML = `<span class="badge">正解: ${escapeHtml(q.answerText)}</span>`;
+      $('ctrlAnswerArea').textContent = '';
     }
     // 新しい問題に切り替わったらランキング表示をクリア
     if (st.currentIndex !== ctrlIndexShown && st.status === 'question') {

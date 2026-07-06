@@ -142,6 +142,29 @@ function buildRanking(room) {
   return arr;
 }
 
+// 参加者へ送るランキングを「上位N + 自分」に絞る（送信量・CPU削減）
+function trimRanking(ranking, playerId, topN) {
+  const top = ranking.slice(0, topN);
+  if (playerId && !top.some((r) => r.playerId === playerId)) {
+    const me = ranking.find((r) => r.playerId === playerId);
+    if (me) top.push(me);
+  }
+  return top;
+}
+
+// ニックネーム重複時に (2)(3)… を付けて識別可能にする
+function uniqueNickname(room, base, excludePid) {
+  const taken = new Set(
+    Object.values(room.players)
+      .filter((p) => p.playerId !== excludePid)
+      .map((p) => p.nickname)
+  );
+  if (!taken.has(base)) return base;
+  let i = 2;
+  while (taken.has(`${base}(${i})`)) i++;
+  return `${base}(${i})`;
+}
+
 function lobbyPlayers(room) {
   return Object.values(room.players).map((p) => ({
     playerId: p.playerId,
@@ -201,10 +224,32 @@ function emitAdminState(room) {
   });
 }
 
+// 回答集中時（200人規模）に管理者への更新が過剰にならないよう間引く
+// （先頭は即時、その後は最大 800ms に1回まとめて送信）
+function emitAdminStateThrottled(room) {
+  if (room.adminThrottle) {
+    room.adminPending = true;
+    return;
+  }
+  emitAdminState(room);
+  room.adminThrottle = setTimeout(() => {
+    room.adminThrottle = null;
+    if (room.adminPending) {
+      room.adminPending = false;
+      emitAdminState(room);
+    }
+  }, 800);
+}
+
 function clearTimers(room) {
   if (room.questionTimer) {
     clearTimeout(room.questionTimer);
     room.questionTimer = null;
+  }
+  if (room.adminThrottle) {
+    clearTimeout(room.adminThrottle);
+    room.adminThrottle = null;
+    room.adminPending = false;
   }
 }
 
@@ -277,7 +322,7 @@ function revealAnswer(room) {
       gained: ans ? ans.points : 0,
       score: my.score || 0,
       rank: my.rank || ranking.length,
-      ranking,
+      ranking: trimRanking(ranking, p.playerId, 10),
       total: room.quiz.questions.length,
     };
     if (p.socketId) io.to(p.socketId).emit('question:reveal', payload);
@@ -306,13 +351,21 @@ function endSession(room, reason) {
   clearSessionTimer(room);
   room.status = 'ended';
   const ranking = buildRanking(room);
-  const payload = {
+  // 参加者へは「上位10 + 自分」に絞って個別送信
+  Object.values(room.players).forEach((p) => {
+    if (!p.socketId) return;
+    io.to(p.socketId).emit('room:ended', {
+      reason: reason || '終了',
+      ranking: trimRanking(ranking, p.playerId, 10),
+      quizTitle: room.quiz.title,
+    });
+  });
+  // 管理者へは全員分
+  io.to(adminRoomName(room.code)).emit('room:ended', {
     reason: reason || '終了',
     ranking,
     quizTitle: room.quiz.title,
-  };
-  io.to(room.code).emit('room:ended', payload);
-  io.to(adminRoomName(room.code)).emit('room:ended', payload);
+  });
   emitAdminState(room);
 }
 
@@ -467,15 +520,14 @@ io.on('connection', (socket) => {
     let player = pid && room.players[pid];
 
     if (player) {
-      // 再接続
-      player.nickname = name;
+      // 再接続：既に一意化された表示名を維持する（重複回避のズレを防ぐ）
       player.connected = true;
       player.socketId = socket.id;
     } else {
       pid = 'p_' + Date.now().toString(36) + Math.floor(Math.random() * 100000).toString(36);
       player = {
         playerId: pid,
-        nickname: name,
+        nickname: uniqueNickname(room, name),
         socketId: socket.id,
         connected: true,
         score: 0,
@@ -494,6 +546,7 @@ io.on('connection', (socket) => {
       cb({
         ok: true,
         playerId: pid,
+        nickname: player.nickname,
         status: room.status,
         quizTitle: room.quiz.title,
       });
@@ -519,7 +572,7 @@ io.on('connection', (socket) => {
         gained: ans ? ans.points : 0,
         score: my.score || 0,
         rank: my.rank || ranking.length,
-        ranking,
+        ranking: trimRanking(ranking, pid, 10),
         total: room.quiz.questions.length,
       });
     }
@@ -576,8 +629,8 @@ io.on('connection', (socket) => {
       answered,
       total: Object.keys(room.players).length,
     });
-    // 回答一覧をリアルタイム更新（管理者画面のみ）
-    emitAdminState(room);
+    // 回答一覧を更新（管理者画面のみ・大人数時の負荷を抑えるため間引き）
+    emitAdminStateThrottled(room);
   });
 
   socket.on('disconnect', () => {

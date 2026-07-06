@@ -68,10 +68,14 @@ function doJoin() {
     if (!res || !res.ok) return ($('joinError').textContent = (res && res.error) || '参加できませんでした');
     state.playerId = res.playerId;
     state.code = code;
-    state.nickname = nickname;
+    // 同名がいた場合サーバー側で (2)(3)… を付与した表示名になる
+    state.nickname = res.nickname || nickname;
     localStorage.setItem('quiz_playerId', res.playerId);
     localStorage.setItem('quiz_code', code);
-    $('lobbyName').textContent = nickname + ' さん';
+    $('lobbyName').textContent = state.nickname + ' さん';
+    if (res.nickname && res.nickname !== nickname) {
+      toast(`同名の方がいるため「${res.nickname}」で参加しました`);
+    }
     $('lobbyTitle').textContent = res.quizTitle || '参加完了！';
     if (res.status === 'lobby') showOnly('lobby');
   });
@@ -84,6 +88,7 @@ if (state.playerId && savedCode) {
   socket.emit('player:join', { code: savedCode, nickname: state.nickname, playerId: state.playerId }, (res) => {
     if (res && res.ok) {
       state.code = savedCode;
+      if (res.nickname) state.nickname = res.nickname;
       $('lobbyName').textContent = state.nickname + ' さん';
       $('lobbyTitle').textContent = res.quizTitle || '参加完了！';
       if (res.status === 'lobby') showOnly('lobby');
@@ -197,21 +202,14 @@ socket.on('question:reveal', (r) => {
   $('myRank').textContent = r.rank;
   $('myScore').textContent = r.score;
   state.lastRanking = r.ranking;
-  state.showAllRank = false;
-  $('toggleAll').textContent = '全員の順位を見る';
-  renderRank('revealRank', r.ranking, false);
+  // サーバーから届くランキングは「上位10 + 自分」に絞られている
+  renderRank('revealRank', r.ranking);
 });
 
-$('toggleAll').addEventListener('click', () => {
-  state.showAllRank = !state.showAllRank;
-  $('toggleAll').textContent = state.showAllRank ? '上位のみ表示' : '全員の順位を見る';
-  renderRank('revealRank', state.lastRanking, state.showAllRank);
-});
-
-function renderRank(elId, ranking, all) {
+function renderRank(elId, ranking) {
   const ol = $(elId);
   ol.innerHTML = '';
-  const list = all ? ranking : ranking.slice(0, 5);
+  const list = ranking || [];
   list.forEach((r) => {
     const li = document.createElement('li');
     li.className = `rank-item rank-${r.rank}` + (r.playerId === state.playerId ? ' me' : '');
@@ -236,7 +234,7 @@ socket.on('room:ended', (data) => {
   const me = (data.ranking || []).find((r) => r.playerId === state.playerId);
   $('finalRank').textContent = me ? me.rank : '-';
   $('finalScore').textContent = me ? me.score : 0;
-  renderRank('finalRank2', data.ranking, true);
+  renderRank('finalRank2', data.ranking);
 });
 
 socket.on('room:closed', () => {
