@@ -179,3 +179,15 @@ button.full { width: 100%; }
 .ans-chip.ng { border-color: var(--ng); background: #3a1820; }
 .ans-name { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ans-val { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 管理者: 採点入力 */
+#ctrlGrade {
+  background: var(--panel2); border: 1px solid #38406e; border-radius: 12px;
+  padding: 14px; margin: 12px 0;
+}
+.grade-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.grade-choice {
+  background: var(--panel); border: 2px solid #38406e; color: var(--text);
+  text-align: left; font-weight: 700; padding: 12px;
+}
+.grade-choice.picked { border-color: var(--ok); background: #173a28; }

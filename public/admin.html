@@ -76,19 +76,28 @@
   <section id="controlSection" class="panel hidden">
     <div class="qmeta"><span id="ctrlIndex"></span> ・ <span id="ctrlStatus"></span></div>
     <div class="qtext" id="ctrlQText"></div>
-    <div id="ctrlAnswerArea" class="muted" style="margin-top:10px"></div>
 
     <div class="center" style="margin:14px 0">
       <span class="badge">回答 <b id="answeredCount">0</b> / <span id="answeredTotal">0</span> 人</span>
     </div>
 
+    <!-- 採点入力（採点フェーズのみ表示） -->
+    <div id="ctrlGrade" class="hidden"></div>
+
+    <!-- 正解表示 -->
+    <div id="ctrlAnswerArea" class="muted" style="margin-top:10px"></div>
+
+    <!-- 全員の回答 -->
     <div id="ctrlAnswers"></div>
 
+    <!-- ランキング（結果フェーズ） -->
     <div id="ctrlRanking"></div>
 
+    <!-- 進行ボタン（フェーズにより切替） -->
     <div class="row" style="margin-top:16px">
-      <button id="revealBtn" class="secondary">解答へ進む</button>
-      <button id="nextBtn" disabled>次の問題へ ▶</button>
+      <button id="closeBtn" class="secondary">回答を締め切って採点する</button>
+      <button id="showRankBtn" class="secondary hidden">ランキングを表示 ▶</button>
+      <button id="nextBtn" class="hidden">次の問題へ ▶</button>
     </div>
     <div style="margin-top:10px">
       <button class="danger full" id="endBtn">⏹ このプロジェクトを終了</button>

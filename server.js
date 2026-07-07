@@ -178,37 +178,51 @@ function adminRoomName(code) {
 }
 
 function adminCurrentQuestion(room) {
-  if (room.status !== 'question' && room.status !== 'reveal') return null;
+  if (room.status !== 'question' && room.status !== 'grading' && room.status !== 'result') return null;
   const q = room.quiz.questions[room.currentIndex];
   if (!q) return null;
+  const key = room.answerKey[room.currentIndex] || null;
   return {
     index: room.currentIndex,
     type: q.type,
     text: q.text,
-    choices: q.choices,
-    answerText: q.type === 'choice' ? q.choices[q.answerIndex] : (q.acceptedAnswers[0] || ''),
-    acceptedAnswers: q.acceptedAnswers || [],
+    choices: q.choices || [],
+    // 解答は事前に持たない。採点時に管理者が入力した内容のみ返す
+    graded: !!(key && key.graded),
+    correctChoiceIndex: key && key.choiceIndex != null ? key.choiceIndex : null,
+    acceptedAnswers: key && key.acceptedAnswers ? key.acceptedAnswers : [],
     deadline: room.questionDeadline || null,
   };
 }
 
-// 管理者画面用: 現在の問題に対する全員の回答一覧
+// 管理者画面用: 現在の問題に対する全員の回答一覧（入力順）
 function currentAnswers(room) {
-  return Object.values(room.players).map((p) => {
-    const a = p.answers[room.currentIndex];
-    return {
-      playerId: p.playerId,
-      nickname: p.nickname,
-      answered: !!a,
-      answer: a ? a.raw : null,
-      correct: a ? a.correct : false,
-    };
-  });
+  return Object.values(room.players)
+    .map((p) => {
+      const a = p.answers[room.currentIndex];
+      return {
+        playerId: p.playerId,
+        nickname: p.nickname,
+        answered: !!a,
+        answer: a ? a.raw : null,
+        choiceIndex: a && a.choiceIndex != null ? a.choiceIndex : null,
+        correct: a ? !!a.correct : false,
+        graded: a ? !!a.graded : false,
+        time: a ? a.time : null,
+      };
+    })
+    .sort((x, y) => {
+      // 回答済みを入力順(早い順)で先頭に、未回答を末尾に
+      if (x.answered !== y.answered) return x.answered ? -1 : 1;
+      if (x.answered && y.answered) return (x.time || 0) - (y.time || 0);
+      return 0;
+    });
 }
 
 function emitAdminState(room) {
   const answered = Object.values(room.players).filter((p) => p.answers[room.currentIndex]).length;
-  const showAnswers = room.status === 'question' || room.status === 'reveal';
+  const showAnswers =
+    room.status === 'question' || room.status === 'grading' || room.status === 'result';
   io.to(adminRoomName(room.code)).emit('admin:state', {
     code: room.code,
     quizTitle: room.quiz.title,
@@ -291,19 +305,92 @@ function showQuestion(room) {
   emitAdminState(room);
 }
 
-// 解答を公開し、各自に正誤＋ランキングを通知
-function revealAnswer(room) {
+// 回答を締め切り、採点フェーズへ（解答はまだ入力しない）
+function closeAnswers(room) {
   clearTimers(room);
-  room.status = 'reveal';
+  room.status = 'grading';
   room.answersLocked = true;
+  io.to(room.code).emit('answers:closed', { index: room.currentIndex });
+  emitAdminState(room);
+}
+
+// 1つの回答が正解かどうかを、管理者が入力した解答(key)で判定
+function computeCorrect(q, key, ans) {
+  if (!key || !ans) return false;
+  if (q.type === 'choice') {
+    return key.choiceIndex != null && ans.choiceIndex === key.choiceIndex;
+  }
+  return isFreeAnswerCorrect(ans.raw, key.acceptedAnswers || []);
+}
+
+// 全プレイヤーのスコアを、採点済みの回答から再計算（1問正解=1pt）
+function recomputeScores(room) {
+  Object.values(room.players).forEach((p) => {
+    let score = 0;
+    let correctCount = 0;
+    let totalTime = 0;
+    Object.values(p.answers).forEach((a) => {
+      a.points = a.correct ? 1 : 0;
+      if (a.correct) {
+        score += 1;
+        correctCount += 1;
+        totalTime += a.time || 0;
+      }
+    });
+    p.score = score;
+    p.correctCount = correctCount;
+    p.totalTime = totalTime;
+  });
+}
+
+// 管理者が入力した解答で現在の問題を採点
+function gradeQuestion(room, payload) {
+  const idx = room.currentIndex;
+  const q = room.quiz.questions[idx];
+  if (!q) return;
+  const key = { graded: true };
+  if (q.type === 'choice') {
+    key.choiceIndex = Number.isInteger(payload && payload.choiceIndex) ? payload.choiceIndex : null;
+  } else {
+    key.acceptedAnswers = Array.isArray(payload && payload.acceptedAnswers)
+      ? payload.acceptedAnswers.map((s) => String(s).trim()).filter(Boolean)
+      : [];
+  }
+  room.answerKey[idx] = key;
+  Object.values(room.players).forEach((p) => {
+    const a = p.answers[idx];
+    if (!a) return;
+    a.correct = computeCorrect(q, key, a);
+    a.graded = true;
+  });
+  recomputeScores(room);
+  emitAdminState(room);
+}
+
+// 個別の回答の正誤を管理者が手動で調整
+function toggleAnswer(room, playerId, correct) {
+  const idx = room.currentIndex;
+  const p = room.players[playerId];
+  if (!p || !p.answers[idx]) return;
+  p.answers[idx].correct = !!correct;
+  p.answers[idx].graded = true;
+  recomputeScores(room);
+  emitAdminState(room);
+}
+
+// 採点結果を確定し、その時点のランキングを全員に表示
+function showRanking(room) {
+  clearTimers(room);
+  room.status = 'result';
   const q = room.quiz.questions[room.currentIndex];
+  const key = room.answerKey[room.currentIndex] || {};
   const ranking = buildRanking(room);
 
   let correctText;
   if (q.type === 'choice') {
-    correctText = q.choices[q.answerIndex];
+    correctText = key.choiceIndex != null ? q.choices[key.choiceIndex] : '(未設定)';
   } else {
-    correctText = (q.acceptedAnswers && q.acceptedAnswers[0]) || '';
+    correctText = (key.acceptedAnswers && key.acceptedAnswers[0]) || '(未設定)';
   }
 
   const rankByPlayer = {};
@@ -316,9 +403,9 @@ function revealAnswer(room) {
     const payload = {
       index: room.currentIndex,
       correctText,
-      acceptedAnswers: q.type === 'free' ? q.acceptedAnswers : undefined,
+      acceptedAnswers: q.type === 'free' ? key.acceptedAnswers : undefined,
       yourAnswer: ans ? ans.raw : null,
-      correct: ans ? ans.correct : false,
+      correct: ans ? !!ans.correct : false,
       gained: ans ? ans.points : 0,
       score: my.score || 0,
       rank: my.rank || ranking.length,
@@ -331,7 +418,7 @@ function revealAnswer(room) {
   io.to(adminRoomName(room.code)).emit('admin:reveal', {
     index: room.currentIndex,
     correctText,
-    acceptedAnswers: q.type === 'free' ? q.acceptedAnswers : undefined,
+    acceptedAnswers: q.type === 'free' ? key.acceptedAnswers : undefined,
     ranking,
   });
   emitAdminState(room);
@@ -443,6 +530,7 @@ io.on('connection', (socket) => {
       status: 'lobby',
       currentIndex: 0,
       players: {}, // playerId -> player
+      answerKey: {}, // index -> { graded, choiceIndex?, acceptedAnswers? } 管理者が採点時に入力
       questionStart: 0,
       questionDeadline: null,
       sessionDeadline: null,
@@ -481,15 +569,38 @@ io.on('connection', (socket) => {
     showQuestion(room);
   });
 
-  socket.on('admin:reveal', (code) => {
+  // 回答を締め切って採点フェーズへ
+  socket.on('admin:closeAnswers', (code) => {
     const room = rooms[code];
     if (!room || room.status !== 'question') return;
-    revealAnswer(room);
+    closeAnswers(room);
+  });
+
+  // 管理者が解答を入力して採点
+  socket.on('admin:grade', (payload, cb) => {
+    const room = rooms[payload && payload.code];
+    if (!room || room.status !== 'grading') return cb && cb({ ok: false });
+    gradeQuestion(room, payload);
+    cb && cb({ ok: true });
+  });
+
+  // 個別回答の正誤を手動で調整
+  socket.on('admin:toggleAnswer', (payload) => {
+    const room = rooms[payload && payload.code];
+    if (!room || room.status !== 'grading') return;
+    toggleAnswer(room, payload.playerId, payload.correct);
+  });
+
+  // 採点確定 → ランキング表示
+  socket.on('admin:showRanking', (code) => {
+    const room = rooms[code];
+    if (!room || room.status !== 'grading') return;
+    showRanking(room);
   });
 
   socket.on('admin:next', (code) => {
     const room = rooms[code];
-    if (!room || room.status !== 'reveal') return;
+    if (!room || room.status !== 'result') return;
     nextQuestion(room);
   });
 
@@ -557,18 +668,29 @@ io.on('connection', (socket) => {
       if (player.answers[room.currentIndex]) {
         socket.emit('answer:received', { index: room.currentIndex });
       }
-    } else if (room.status === 'reveal') {
-      // 直近のreveal結果を再送
+    } else if (room.status === 'grading') {
+      // 採点中: 出題内容を出しつつ回答締切状態に
+      socket.emit('question:show', publicQuestion(room));
+      if (player.answers[room.currentIndex]) {
+        socket.emit('answer:received', { index: room.currentIndex });
+      }
+      socket.emit('answers:closed', { index: room.currentIndex });
+    } else if (room.status === 'result') {
+      // 直近の結果(ランキング)を再送
       const q = room.quiz.questions[room.currentIndex];
+      const key = room.answerKey[room.currentIndex] || {};
       const ranking = buildRanking(room);
       const my = ranking.find((r) => r.playerId === pid) || {};
       const ans = player.answers[room.currentIndex];
       socket.emit('question:reveal', {
         index: room.currentIndex,
-        correctText: q.type === 'choice' ? q.choices[q.answerIndex] : (q.acceptedAnswers[0] || ''),
-        acceptedAnswers: q.type === 'free' ? q.acceptedAnswers : undefined,
+        correctText:
+          q.type === 'choice'
+            ? (key.choiceIndex != null ? q.choices[key.choiceIndex] : '(未設定)')
+            : (key.acceptedAnswers && key.acceptedAnswers[0]) || '(未設定)',
+        acceptedAnswers: q.type === 'free' ? key.acceptedAnswers : undefined,
         yourAnswer: ans ? ans.raw : null,
-        correct: ans ? ans.correct : false,
+        correct: ans ? !!ans.correct : false,
         gained: ans ? ans.points : 0,
         score: my.score || 0,
         rank: my.rank || ranking.length,
@@ -594,28 +716,25 @@ io.on('connection', (socket) => {
 
     const q = room.quiz.questions[room.currentIndex];
     const elapsed = Date.now() - room.questionStart;
-    let correct = false;
     let raw;
+    let choiceIndex = null;
 
     if (q.type === 'choice') {
-      const idx = parseInt(payload.choiceIndex, 10);
-      raw = q.choices[idx];
-      correct = idx === q.answerIndex;
+      choiceIndex = parseInt(payload.choiceIndex, 10);
+      raw = q.choices[choiceIndex];
     } else {
       raw = (payload.text || '').toString().slice(0, 100);
-      correct = isFreeAnswerCorrect(raw, q.acceptedAnswers);
     }
 
-    let points = 0;
-    if (correct) {
-      // 1問正解につき 1pt（時間ボーナスなし）
-      points = 1;
-      player.correctCount += 1;
-      player.totalTime += elapsed; // 同点時の順位付け（早押し）用に保持
-    }
-
-    player.answers[room.currentIndex] = { raw, correct, points, time: elapsed };
-    player.score += points;
+    // 正誤はこの時点では判定しない（管理者が後で採点する）
+    player.answers[room.currentIndex] = {
+      raw,
+      choiceIndex,
+      correct: false,
+      graded: false,
+      points: 0,
+      time: elapsed,
+    };
 
     cb && cb({ ok: true });
     socket.emit('answer:received', { index: room.currentIndex });

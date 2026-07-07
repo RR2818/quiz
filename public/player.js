@@ -174,6 +174,8 @@ socket.on('answer:received', () => {
   state.answeredThisQ = true;
   hide('qChoices');
   hide('qFree');
+  $('answeredIcon').textContent = '✅';
+  $('answeredText').textContent = '回答しました。お待ちください…';
   show('answeredMsg');
 });
 
@@ -184,6 +186,20 @@ socket.on('question:timeup', () => {
     $('freeSubmit').disabled = true;
     toast('時間切れ');
   }
+});
+
+// 回答締切 → 採点中の待機画面（回答有無に関わらず全員）
+socket.on('answers:closed', () => {
+  clearInterval(timerInterval);
+  $('qTimer').textContent = '';
+  document.querySelectorAll('.choice-btn').forEach((b) => (b.disabled = true));
+  $('freeInput').disabled = true;
+  $('freeSubmit').disabled = true;
+  hide('qChoices');
+  hide('qFree');
+  $('answeredIcon').textContent = '⏳';
+  $('answeredText').textContent = '回答を締め切りました。採点中です…';
+  show('answeredMsg');
 });
 
 // ------- 結果 -------

@@ -99,43 +99,30 @@ function renderQuestion(q, i) {
     if (q.type === 'choice') {
       if (!q.choices || q.choices.length < 2) q.choices = ['', '', '', ''];
       const lbl = document.createElement('label');
-      lbl.textContent = '選択肢（ラジオで正解を選択）';
+      lbl.textContent = '選択肢';
       area.appendChild(lbl);
       q.choices.forEach((c, ci) => {
         const row = document.createElement('div');
         row.className = 'row';
         row.style.alignItems = 'center';
         row.style.marginBottom = '6px';
-        const radio = document.createElement('input');
-        radio.type = 'radio';
-        radio.name = 'correct_' + q.id;
-        radio.checked = q.answerIndex === ci;
-        radio.style.flex = '0 0 auto';
-        radio.addEventListener('change', () => (q.answerIndex = ci));
         const inp = document.createElement('input');
         inp.type = 'text';
         inp.value = c;
         inp.placeholder = '選択肢 ' + (ci + 1);
         inp.style.flex = '6';
         inp.addEventListener('input', (e) => (q.choices[ci] = e.target.value));
-        row.appendChild(radio);
         row.appendChild(inp);
         area.appendChild(row);
       });
-    } else {
-      const lbl = document.createElement('label');
-      lbl.textContent = '正答（1行に1つ。略称・ひらがな等の別解も追加可）';
-      area.appendChild(lbl);
-      const ta = document.createElement('textarea');
-      ta.value = (q.acceptedAnswers || []).join('\n');
-      ta.placeholder = '例:\n琵琶湖\nびわ湖\nびわこ';
-      ta.addEventListener('input', (e) => {
-        q.acceptedAnswers = e.target.value.split('\n').map((s) => s.trim()).filter(Boolean);
-      });
-      area.appendChild(ta);
       const hint = document.createElement('p');
       hint.className = 'muted';
-      hint.textContent = '※ 大文字小文字・全角半角・ひらがな/カタカナ・空白の違いは自動で吸収して判定します。';
+      hint.textContent = '※ 正解は出題後、回答が揃ってから管理画面で入力します（事前設定不要）。';
+      area.appendChild(hint);
+    } else {
+      const hint = document.createElement('p');
+      hint.className = 'muted';
+      hint.textContent = 'フリー回答です。正答は出題後、回答が揃ってから管理画面で入力します（事前設定不要）。';
       area.appendChild(hint);
     }
   }
@@ -173,12 +160,8 @@ $('saveQuizBtn').addEventListener('click', () => {
     if (q.type === 'choice') {
       const filled = q.choices.filter((c) => c.trim());
       if (filled.length < 2) return toast(`問${i + 1}: 選択肢を2つ以上入力してください`);
-      if (!q.choices[q.answerIndex] || !q.choices[q.answerIndex].trim())
-        return toast(`問${i + 1}: 正解の選択肢が空です`);
-    } else {
-      if (!q.acceptedAnswers || !q.acceptedAnswers.length)
-        return toast(`問${i + 1}: 正答を1つ以上入力してください`);
     }
+    // 正解は事前入力不要（出題後に管理画面で採点）
   }
   socket.emit('admin:saveQuiz', current, (res) => {
     if (!res.ok) return toast('保存失敗');
@@ -282,8 +265,10 @@ $('startBtn').addEventListener('click', () => {
 
 // =================================================================
 // 進行制御
+//   出題(question) → 回答締切/採点(grading) → ランキング(result) → 次へ
 // =================================================================
-$('revealBtn').addEventListener('click', () => socket.emit('admin:reveal', roomCode));
+$('closeBtn').addEventListener('click', () => socket.emit('admin:closeAnswers', roomCode));
+$('showRankBtn').addEventListener('click', () => socket.emit('admin:showRanking', roomCode));
 $('nextBtn').addEventListener('click', () => socket.emit('admin:next', roomCode));
 $('endBtn').addEventListener('click', () => {
   if (confirm('プロジェクトを終了して結果を表示しますか？')) socket.emit('admin:end', roomCode);
@@ -307,13 +292,14 @@ socket.on('admin:state', (st) => {
 
   if (st.status === 'lobby') {
     enterLobby();
-  } else if (st.status === 'question' || st.status === 'reveal') {
+  } else if (st.status === 'question' || st.status === 'grading' || st.status === 'result') {
     enterControl(st);
   } else if (st.status === 'ended') {
-    // 終了は room:ended / admin:reveal 経由で処理。最終ランキング待ち。
+    // 終了は room:ended 経由で処理。
   }
 });
 
+const STATUS_LABEL = { question: '出題中（回答受付中）', grading: '採点中', result: 'ランキング表示中' };
 let ctrlIndexShown = -1;
 function enterControl(st) {
   hide('lobbySection');
@@ -322,26 +308,111 @@ function enterControl(st) {
   hide('resultSection');
   show('controlSection');
   $('ctrlIndex').textContent = `第 ${st.currentIndex + 1} 問 / 全 ${st.total} 問`;
-  $('ctrlStatus').textContent = st.status === 'question' ? '出題中' : '解答公開中';
-  $('revealBtn').disabled = st.status !== 'question';
-  $('nextBtn').disabled = st.status !== 'reveal';
+  $('ctrlStatus').textContent = STATUS_LABEL[st.status] || '';
   $('answeredCount').textContent = st.answered || 0;
+
+  // フェーズに応じたボタン表示
+  toggle('closeBtn', st.status === 'question');
+  toggle('showRankBtn', st.status === 'grading');
+  toggle('nextBtn', st.status === 'result');
 
   const q = st.currentQuestion;
   if (q) {
     $('ctrlQText').textContent = q.text;
-    // 出題中は正解を表示しない（解答公開時に admin:reveal で表示）
-    if (st.status === 'question') {
+    // 問題が切り替わったら前問の表示をクリア
+    if (st.currentIndex !== ctrlIndexShown) {
+      $('ctrlRanking').innerHTML = '';
       $('ctrlAnswerArea').textContent = '';
     }
-    // 新しい問題に切り替わったらランキング表示をクリア
-    if (st.currentIndex !== ctrlIndexShown && st.status === 'question') {
-      $('ctrlRanking').innerHTML = '';
-    }
     ctrlIndexShown = st.currentIndex;
+
+    // 採点フェーズのみ、解答入力UIを表示
+    if (st.status === 'grading') {
+      show('ctrlGrade');
+      renderGrade(q);
+    } else {
+      hide('ctrlGrade');
+    }
   }
   // 全員分の回答一覧（管理者画面のみ）
   renderAnswers(st.answers, st.status, q);
+}
+
+function toggle(id, on) {
+  $(id).classList.toggle('hidden', !on);
+}
+
+// 採点用の解答入力UI（採点フェーズ）
+let gradeState = { choiceIndex: null, freeText: '' };
+function renderGrade(q) {
+  const box = $('ctrlGrade');
+  // 同じ問題で再描画時は入力内容を保持
+  if (box.dataset.qindex !== String(q.index)) {
+    box.dataset.qindex = String(q.index);
+    gradeState = {
+      choiceIndex: q.correctChoiceIndex != null ? q.correctChoiceIndex : null,
+      freeText: (q.acceptedAnswers || []).join('\n'),
+    };
+    box.innerHTML = '';
+    renderGradeInner(q, box);
+  }
+}
+
+function renderGradeInner(q, box) {
+  box.innerHTML = '<h3>解答を入力して採点</h3>';
+  if (q.type === 'choice') {
+    const wrap = document.createElement('div');
+    wrap.className = 'grade-choices';
+    (q.choices || []).forEach((c, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'grade-choice' + (gradeState.choiceIndex === i ? ' picked' : '');
+      b.textContent = `${i + 1}. ${c}`;
+      b.addEventListener('click', () => {
+        gradeState.choiceIndex = i;
+        wrap.querySelectorAll('.grade-choice').forEach((el, j) =>
+          el.classList.toggle('picked', j === i)
+        );
+      });
+      wrap.appendChild(b);
+    });
+    box.appendChild(wrap);
+    const p = document.createElement('p');
+    p.className = 'muted';
+    p.textContent = '正解の選択肢を選び「採点する」を押してください。';
+    box.appendChild(p);
+  } else {
+    const lbl = document.createElement('label');
+    lbl.textContent = '正答（1行に1つ。別解も追加可）';
+    box.appendChild(lbl);
+    const ta = document.createElement('textarea');
+    ta.value = gradeState.freeText;
+    ta.placeholder = '例:\n琵琶湖\nびわ湖\nびわこ';
+    ta.addEventListener('input', (e) => (gradeState.freeText = e.target.value));
+    box.appendChild(ta);
+    const p = document.createElement('p');
+    p.className = 'muted';
+    p.textContent = '※ 大文字小文字・全角半角・ひらがな/カタカナ・空白の違いは自動で吸収します。採点後に個別回答をクリックして正誤を修正できます。';
+    box.appendChild(p);
+  }
+  const gradeBtn = document.createElement('button');
+  gradeBtn.className = 'full';
+  gradeBtn.textContent = '✔ 採点する';
+  gradeBtn.addEventListener('click', () => {
+    const payload = { code: roomCode };
+    if (q.type === 'choice') {
+      if (gradeState.choiceIndex == null) return toast('正解の選択肢を選んでください');
+      payload.choiceIndex = gradeState.choiceIndex;
+    } else {
+      const list = gradeState.freeText.split('\n').map((s) => s.trim()).filter(Boolean);
+      if (!list.length) return toast('正答を入力してください');
+      payload.acceptedAnswers = list;
+    }
+    socket.emit('admin:grade', payload, (res) => {
+      if (res && res.ok) toast('採点しました。個別に修正も可能です');
+    });
+  });
+  box.appendChild(gradeBtn);
 }
 
 // 全員の回答を見やすく一覧表示（管理者専用）
@@ -352,40 +423,51 @@ function renderAnswers(answers, status, q) {
     return;
   }
   const answeredList = answers.filter((a) => a.answered);
-  const reveal = status === 'reveal';
+  const graded = answeredList.some((a) => a.graded);
+  const canToggle = status === 'grading' && graded;
 
   // 選択式は選択肢ごとの集計も表示
-  let summary = '';
+  let summaryHtml = '';
   if (q && q.type === 'choice' && Array.isArray(q.choices)) {
     const counts = q.choices.map(() => 0);
     answeredList.forEach((a) => {
-      const idx = q.choices.indexOf(a.answer);
-      if (idx >= 0) counts[idx]++;
+      if (a.choiceIndex != null && counts[a.choiceIndex] != null) counts[a.choiceIndex]++;
     });
-    summary = '<div class="answers-summary">' +
+    summaryHtml = '<div class="answers-summary">' +
       q.choices.map((c, i) =>
         `<span class="sum-chip">${escapeHtml(c)} <b>${counts[i]}</b></span>`
       ).join('') + '</div>';
   }
 
-  let html = `<h3>みんなの回答（${answeredList.length}/${answers.length}）</h3>` + summary +
-    '<div class="answers-grid">';
+  const hint = canToggle ? '（回答をクリックで正誤を切替）' : '';
+  box.innerHTML = `<h3>みんなの回答（${answeredList.length}/${answers.length}）<span class="muted" style="font-weight:400">${hint}</span></h3>` +
+    summaryHtml + '<div class="answers-grid" id="ansGrid"></div>';
+  const grid = $('ansGrid');
+
   answers.forEach((a) => {
+    const div = document.createElement('div');
     let cls = 'ans-chip';
     let val;
     if (!a.answered) {
       cls += ' pending';
       val = '⏳ 回答待ち';
     } else {
-      if (reveal) cls += a.correct ? ' ok' : ' ng';
-      val = (a.answer == null || a.answer === '') ? '(無回答)' : escapeHtml(a.answer);
-      if (reveal) val = (a.correct ? '⭕ ' : '❌ ') + val;
+      if (graded) cls += a.correct ? ' ok' : ' ng';
+      val = (a.answer == null || a.answer === '') ? '(無回答)' : a.answer;
+      if (graded) val = (a.correct ? '⭕ ' : '❌ ') + val;
     }
-    html += `<div class="${cls}"><span class="ans-name">${escapeHtml(a.nickname)}</span>` +
-      `<span class="ans-val">${val}</span></div>`;
+    div.className = cls;
+    div.innerHTML = `<span class="ans-name">${escapeHtml(a.nickname)}</span>` +
+      `<span class="ans-val">${escapeHtml(val)}</span>`;
+    if (canToggle && a.answered) {
+      div.style.cursor = 'pointer';
+      div.title = 'クリックで正誤を切替';
+      div.addEventListener('click', () => {
+        socket.emit('admin:toggleAnswer', { code: roomCode, playerId: a.playerId, correct: !a.correct });
+      });
+    }
+    grid.appendChild(div);
   });
-  html += '</div>';
-  box.innerHTML = html;
 }
 
 socket.on('admin:answerCount', (d) => {
@@ -399,7 +481,7 @@ socket.on('admin:reveal', (d) => {
     txt += `（別解: ${d.acceptedAnswers.slice(1).join('、')}）`;
   }
   $('ctrlAnswerArea').textContent = txt;
-  renderAdminRank('ctrlRanking', d.ranking, 10);
+  renderAdminRank('ctrlRanking', d.ranking, d.ranking.length); // 管理者は全員表示
 });
 
 function renderAdminRank(elId, ranking, limit) {
